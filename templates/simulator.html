@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% block title %}Simulador de Amenazas{% endblock %}
+{% block content %}
+<h1> 💥  Simulador de Amenazas</h1>
+<p>Genera escenarios de tráfico de red y ataques cibernéticos (usando lógica placeholder).</p>
+<div class="action-card">
+    <h2>Configurar y Ejecutar Simulación</h2>
+    <form method="POST" action="{{ url_for('simulate') }}">
+        <div class="form-group">
+            <label for="duration">Duración (segundos):</label>
+            <input type="number" id="duration" name="duration" value="{{ last_simulation_info.config.duration if last_simulation_info and last_simulation_info.config else 60 }}" min="5" max="3600" required>
+        </div>
+        <div class="form-group">
+            <label for="intensity">Intensidad del Ataque (1=Baja, 10=Alta):</label>
+            <input type="number" id="intensity" name="intensity" value="{{ last_simulation_info.config.intensity if last_simulation_info and last_simulation_info.config else 5 }}" min="1" max="10" required>
+        </div>
+        <div class="form-group">
+            <label for="attacks">Tipos de ataques para simular (selecciona uno o más con CTRL/CMD):</label>
+            {% set last_attacks = last_simulation_info.config.attacks if last_simulation_info and last_simulation_info.config and last_simulation_info.config.attacks is iterable else ['DDoS', 'Scan'] %}
+            <select id="attacks" name="attacks" multiple required size="4">
+                {% set possible_attacks = ['DDoS', 'Scan', 'Malware', 'Infiltration'] %}
+                {% for attack_option in possible_attacks %}
+                    <option value="{{ attack_option }}" {% if attack_option in last_attacks %}selected{% endif %}>
+                        {% if attack_option == 'Scan' %}Escaneo de Puertos (Scan)
+                        {% elif attack_option == 'Malware' %}Malware C&C
+                        {% else %}{{ attack_option }}{% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <button type="submit" class="button">Ejecutar Simulación</button>
+        </div>
+    </form>
+</div>
+
+{# --- SECCIÓN CORREGIDA PARA MOSTRAR RESULTADOS DE LA ÚLTIMA SIMULACIÓN O MENSAJE --- #}
+{# Mostrar vista previa de la última simulación si existe y tiene datos (usando preview_headers y preview_data) #}
+{% if last_simulation_info and last_simulation_info.filepath and preview_headers and preview_data %}
+    <div class="preview-section" style="margin-top: 2rem;">
+        <h2>Resultados de la Última Simulación</h2>
+        <h5>Vista Previa (primeras filas):</h5>
+        <div class="table-container">
+             <table class="data-table">
+                <thead>
+                    <tr>
+                        {% for header in preview_headers %}
+                            <th scope="col">{{ header }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preview_data %}
+                    <tr>
+                        {% for cell in row %}
+                            <td>{{ cell }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {# Opción para usar estos datos en Detección #}
+        <form method="POST" action="{{ url_for('detect') }}" style="margin-top: 1rem;">
+            <input type="hidden" name="datasource" value="simulation">
+            <button type="submit" class="button button-secondary">Usar estos datos para Detección</button>
+        </form>
+    </div>
+{% elif session.get('simulation_info') %} {# Si se ejecutó pero no hay preview_data (ej. df vacío) #}
+    <div class="preview-section" style="margin-top: 2rem;">
+        <p class="alert alert-warning">La última simulación se ejecutó, pero no produjo datos válidos para la vista previa o hubo un error al cargarla.</p>
+    </div>
+{% endif %} {# <--- ESTE ES EL ENDIF QUE FALTABA PARA EL BLOQUE if/elif ANTERIOR #}
+{# --- FIN DE LA SECCIÓN CORREGIDA --- #}
+
+<div class="preview-section" style="margin-top: 2rem;">
+    <h2>Historial de Simulaciones (Metadata)</h2>
+    {% if simulation_history %}
+        <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Configuración</th>
+                        <th>Registros</th>
+                        <th>Distribución Etiquetas</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in simulation_history | reverse %}
+                    <tr>
+                        <td>{{ entry.timestamp | format_datetime }}</td>
+                        <td>
+                            {% set config = entry.config if entry.config is mapping else {} %}
+                            Dur: {{ config.get('duration', 'N/A') }}s,<br>
+                            Int: {{ config.get('intensity', 'N/A') }},<br>
+                            Ataques: {{ config.get('attacks', []) | join(', ') }}
+                        </td>
+                        <td>
+                            {# CORRECCIÓN: Usar entry.rows_generated #}
+                            {{ entry.rows_generated if entry.rows_generated is not none else 'N/A' }}
+                        </td>
+                        <td>
+                            {% set distribution = entry.label_distribution if entry.label_distribution is mapping else {} %}
+                            {% if distribution %}
+                                {% for label, count in distribution.items() %}
+                                    <span style="white-space: nowrap;" class="badge 
+                                        {% if 'BENIGN' in label|upper %}bg-success
+                                        {% elif 'ATTACK' in label|upper or 'DDOS' in label|upper or 'MALWARE' in label|upper or 'SCAN' in label|upper or 'INFILTRATION' in label|upper %}bg-danger
+                                        {% else %}bg-secondary
+                                        {% endif %} me-1">
+                                        {{ label }}: {{ count }}
+                                    </span><br>
+                                {% endfor %}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>No se han ejecutado simulaciones.</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    console.log("Simulator JS loaded");
+</script>
+{% endblock %}
